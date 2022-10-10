@@ -1,0 +1,445 @@
+---
+title: "Stats 580 First Project"
+author: 'Vinh Hang'
+date: '2022-10-08'
+output:
+tufte::tufte_html: default
+---
+
+# Stat 580 Project 1
+
+## Executive Summary
+
+The research group of Dr. Frankenstein was formed to assess different cheese variety through their thermalphysical properties and to consider how the use of statistical techniques can improve that practice. This interim report has three purposes: (1) to provide a comprehensive reports about cheese thermalphysical properties across 4 textures, (2) to present a grouping of cheese varieties based on their thermalphysical properties and (3) to perform classification of cheese texture based on said thermalphysical properties. This report includes relatively few conclusions and simple recommendations.
+
+Chapters of this report describe our progress to analyze the three questions above with following results:
+
+- Each cheese texture has statistically different thermalphysical properties except for the `Temperature v at tan (vLTmax)`. Soft cheese has a distinct thermalphysical properties from the rest.
+- The optimal number of cheese variety using K-mean is 4. This concises with the number of textures.
+- Cheese texture can be confidently predicted using their thermalphysical properties. The test error rate in this case is 0%.
+
+Outline:
+
+1. [Project Description]
+2. [Research Questions and Statistical Approaches]
+3. [Variables]
+4. [EDA]
+5. [Statistical Analysis]
+6. [Recommendations]
+7. [Resources]
+8. [Considerations]
+
+R requirements: psych, ggplot2, dplyr, gridExtra, grid, ggpubr, patchwork, table, qacr, factoextra, klaR, psych, MASS, devtools, rstatix, ggbiplot, caret
+
+```{r imports, warning = FALSE, echo = FALSE, message = FALSE}
+library(psych)
+library(ggplot2)
+library(dplyr)
+library(gridExtra)
+library(grid)
+library(ggpubr)
+library(patchwork)
+library(data.table)
+library(qacr)
+library(factoextra)
+library(klaR)
+library(psych)
+library(MASS)
+library(devtools)
+library(rstatix)
+library(ggbiplot)
+library(caret)
+```
+
+## Project Description
+
+The purpose of this study is to analyze four different cheese group from 2 different manufacturers based on their thermophysical properties. The goal consists of identify the differences between them as well as how to group new cheese sample accordingly. The data is provided by Dr. Frankenstein's group which consists of 89 cheese of various types from the four cheese textures. This is an observational study which focuses on cheeses produced by only two manufacturers. Thus, the conclusion might not hold for other manufacturers.
+
+## Research Questions and Statistical Approaches
+
+Dr. Frankenstein seeks answers for the following questions:
+
+1. Are the thermophysical properties of the four cheese textures different? If so, which textures are different?
+- Apply Multivariate analysis of variance (MANOVA) procedure to compare multivariate sample means.
+- Verify MANOVA assumptions.
+- Perform post-hoc comparisons.
+2. Based on thermophysical characteristics, how many cheese varieties (not textures) are present in our data?
+- Kmean algorithm with comparison to Hierarchical clustering.
+3. Can we identify the texture of the cheese using the thermophysical characteristics for new cheese products?
+- Perform LDA and assess confusion matrix.
+- If the performance is not good, try out Random forest.
+
+## Variables
+
+The descriptions for all the variables in the data set are given in the table below. The six figures summary statistics are also given in Table 1.2. Each data points are collected randomly and recorded by Dr. Frankenstein team. For question 1 and 3, texture will be the response variable with all the thermophysical variables as explanatory. For question 2, K-mean is an unsupervised algorithm which requires no response variable and thus texture will only be used for comparison purposes.
+
+```{r pressure, echo=FALSE, fig.cap="Table 1.1 - Data description", out.width = '80%'}
+knitr::include_graphics('D:\\DataspellProjects\\MAS_Fall_22\\Stat_580\\project_1\\images\\data_description.png')
+```
+
+```{r load-data, warning = FALSE, message = FALSE, echo = FALSE}
+# load data
+df_full <- read.csv('D:\\DataspellProjects\\MAS_Fall_22\\Stat_580\\project_1\\data\\cheeseThermophysical.csv', stringsAsFactors = T)
+
+# scale data
+df_full_scaled <- df_full %>%
+	mutate_at(c('G80', 'vLTmax', 'vCO', 'Fmax', 'FD', 'FO'), funs(scale(.)))
+```
+
+
+## EDA
+
+Some observations about the data:
+
+- The data set is very clean and has no missing values.
+- There are no detectable univariate or multivariate outliers for each of the thermophysical characteristics. Looking at the distribution (diagonal line from Figure 2.3), most of them are also normally distributed with the standard inverted U shaped. The only exception is `G80` where each cheese texture has a very distinct values from each other.
+- The lower half of Figure 2.3 shows the scatter plot matrix of each variable with the upper half as the correlation number between them. Most thermophysical properties are not strongly correlated except for 3 pairs with moderate correlation (correlation ranges from -1 to 1 with 0 as no correlation at all):
+- Temperature v at tan (vCO) and Max resistant force during extension of melted cheese (Fmax)
+- Storage modulus at 80C (G80) and Max resistant force during extension of melted cheese (Fmax)
+- Flowing degree (FD) and Free oil (FO)
+- Figure 2.4 shows that cheese varieties are chosen randomly from each manufacturer (1 and 2) without any obvious pattern. This is a very good sign that the collection is carried out correctly.
+
+An interesting note is the result of applying Principal Component Analysis (PCA)to 6 thermophysical properties after scaling. PCA is the technique to reduce number of columns used for algorithm by linearly combining them and use the ones that explained the most variation in the data. In Figure 2.5 and 2.6, about 3 or 4 principal components are good enough here. While there is no reason to use PCA with such a small data set, it can help visualize how each cheese texture are group together based on first and second principal components (see figure 2.7)
+
+
+```{r summary-data, drop1=TRUE, results='markup', echo = FALSE}
+six_figures <- summary(df_full)
+knitr::kable(six_figures, caption = 'Table 1.2 - Size figures summary of thermophysical characteristics')
+```
+
+
+```{r clean-data, warning = FALSE, message = FALSE, echo = FALSE, results = 'hide'}
+# missing values
+sort(colSums(is.na(df_full)), decreasing = TRUE)
+
+# multivariate outliers
+df_full %>%
+	group_by(texture) %>%
+	mahalanobis_distance(c(G80, vLTmax, vCO, Fmax, FD, FO)) %>%
+	filter(is.outlier == TRUE) %>%
+	as.data.frame()
+```
+
+
+```{r correlation-plot, warning = FALSE, message = FALSE, echo = FALSE, eval = FALSE}
+corr <- cor(df_full[c('G80', 'vLTmax', 'vCO', 'Fmax', 'FD', 'FO')])
+corrplot::corrplot(
+	corr, method = 'circle', type = 'lower',
+	main = 'Figure 2.1 - Cheese thermophysical properties correlation',
+	mar = c(0, 0, 2, 0))
+```
+
+```{r matrix-scatter-plot, warning = FALSE, message = FALSE, echo = FALSE, eval = FALSE}
+pairs(df_full[, c('G80', 'vLTmax', 'vCO', 'Fmax', 'FD', 'FO')], pch = 19, cex = 0.5, col = my_cols[df_full$texture],
+      upper.panel = NULL, main = 'Figure 2.2 - Cheese thermophysical properties by Textures')
+```
+
+```{r matrix-all-texture-plot, warning = FALSE, message = FALSE, echo = FALSE}
+my_cols <- c("#00AFBB", "#E7B800", "#FC4E07", "#00FF11")
+pairs.panels(
+	df_full[, c('G80', 'vLTmax', 'vCO', 'Fmax', 'FD', 'FO')],
+	pch = 21,
+	bg = my_cols[df_full$texture],
+	method = 'pearson',
+	hist.col = '#00AFBB',
+	density = TRUE,
+	ellipses = TRUE,
+	main = 'Figure 2.3 - Thermophysical properties by Textures',
+	oma = c(3, 3, 5, 15)
+)
+legend('topright', fill = my_cols, legend = levels(df_full$texture), bty = 'n')
+```
+
+
+```{r matrix-all-manufacturer-plot, warning = FALSE, message = FALSE, echo = FALSE}
+pairs.panels(
+	df_full[, c('G80', 'vLTmax', 'vCO', 'Fmax', 'FD', 'FO')],
+	pch = 21,
+	bg = my_cols[c(1, 3)][df_full$manufacturer],
+	method = 'pearson',
+	hist.col = '#00AFBB',
+	density = TRUE,
+	ellipses = FALSE,
+	main = 'Figure 2.4 - Thermophysical properties by Manufacturers',
+	oma = c(3, 3, 6, 15)
+)
+legend('topright', fill = my_cols[c(1, 3)], legend = levels(factor(df_full$manufacturer)), bty = 'n')
+```
+
+
+```{r data-pca, warning = FALSE, message = FALSE, echo = FALSE, results = 'hide'}
+# compute pcr
+df_pca <- prcomp(df_full_scaled[, c('G80', 'vLTmax', 'vCO', 'Fmax', 'FD', 'FO')], center = TRUE)
+```
+
+```{r scree-plot, warning = FALSE, message = FALSE, echo = FALSE}
+# scree plot
+pve <- 100 * df_pca$sdev^2 / sum(df_pca$sdev^2)
+par(mfrow = c(1, 2))
+plot(pve, type = 'o', ylab = 'PVE', xlab = 'Principle Component', col = 'blue', main = 'Figure 2.5 - Scree plot')
+plot(cumsum(pve), type = 'o', ylab = 'Cumulative PVE', xlab = 'Principle Component', col = 'brown3',
+     main = 'Figure 2.6 - Cumulative')
+```
+
+```{r biplot-pca, warning = FALSE, message = FALSE, echo = FALSE}
+ggbiplot(df_pca, ellipse = TRUE, groups = df_full$texture) + labs(title = 'Figure 2.7 - Biplot with texture grouping')
+```
+
+## Statistical Analysis
+
+### 1. Are the thermophysical properties of the four cheese textures different? If so, which textures are different?
+
+First, lets take a look at how each of the thermophysical property is distributed across 4 textures. Figure 3.1 and 3.2 shows the box plot of each thermophysical property separated by the texture group. Some observations:
+
+- `G80` as mentioned above is very different between textures and thus the boxplot shows similar trait.
+- Soft cheese seems to has very different thermophysical properties from the rest - this observation will come in handy when we need to group cheese togeher.
+- Except forTemperature v at tan (vLTmax), all other thermophysical properties seems to be slightly different across the textures.
+
+```{r cheese-char-1-boxplot, warning = FALSE, message = FALSE, echo = FALSE}
+
+p1 <- ggplot(df_full, aes(x = texture, y = G80, fill = texture)) +
+	geom_boxplot(outlier.shape = NA) +
+	geom_jitter(width = 0.2) +
+	theme(legend.position = 'top') +
+	scale_x_discrete(guide = guide_axis(n.dodge = 2))
+p2 <- ggplot(df_full, aes(x = texture, y = vLTmax, fill = texture)) +
+	geom_boxplot(outlier.shape = NA) +
+	geom_jitter(width = 0.2) +
+	theme(legend.position = 'top') +
+	scale_x_discrete(guide = guide_axis(n.dodge = 2))
+p3 <- ggplot(df_full, aes(x = texture, y = vCO, fill = texture)) +
+	geom_boxplot(outlier.shape = NA) +
+	geom_jitter(width = 0.2) +
+	theme(legend.position = 'top') +
+	scale_x_discrete(guide = guide_axis(n.dodge = 2))
+# grid.arrange(p1, p2, p3, ncol=3, top=textGrob('Figure 3.1 - Boxplot by textures: "G80", "vLTmax", "vCO"'))
+combined <- p1 + p2 + p3 & theme(legend.position = "bottom")
+combined +
+	plot_layout(guides = "collect") +
+	plot_annotation(title = 'Figure 3.1 - Boxplot by textures: "G80", "vLTmax", "vCO"')
+```
+
+
+```{r cheese-char-2-boxplot, warning = FALSE, message = FALSE, echo = FALSE}
+p4 <- ggplot(df_full, aes(x = texture, y = Fmax, fill = texture)) +
+	geom_boxplot(outlier.shape = NA) +
+	geom_jitter(width = 0.2) +
+	theme(legend.position = 'top') +
+	scale_x_discrete(guide = guide_axis(n.dodge = 2))
+p5 <- ggplot(df_full, aes(x = texture, y = FD, fill = texture)) +
+	geom_boxplot(outlier.shape = NA) +
+	geom_jitter(width = 0.2) +
+	theme(legend.position = 'top') +
+	scale_x_discrete(guide = guide_axis(n.dodge = 2))
+p6 <- ggplot(df_full, aes(x = texture, y = FO, fill = texture)) +
+	geom_boxplot(outlier.shape = NA) +
+	geom_jitter(width = 0.2) +
+	theme(legend.position = 'top') +
+	scale_x_discrete(guide = guide_axis(n.dodge = 2))
+# grid.arrange(p4, p5, p6, ncol =3, top=textGrob('Figure 3.2 - Boxplot by textures: "Fmax", "FD", "FO"'))
+combined <- p4 + p5 + p6 & theme(legend.position = "bottom")
+combined +
+	plot_layout(guides = "collect") +
+	plot_annotation(title = 'Figure 3.2 - Boxplot by textures: "Fmax", "FD", "FO"')
+```
+
+Manova demands certain assumptions to be met before carried out. Two main violations are detected in this data which is:
+
+- The data does not have homogeneous variance. (Reject Shapiro Test - p-values of 0.00396)
+- The data does not have a multivariate normal distribution. (failed to reject Levene Test - large p-values)
+- There is some multi-collinearity concern but all correlations are below 0.7.
+
+```{r check-assumptions, warning = FALSE, message = FALSE, echo = FALSE, results = 'hide'}
+# Shapiro-Wilk test for normality
+df_full %>%
+	group_by(texture) %>%
+	shapiro_test(G80, vLTmax, vCO, Fmax, FD, FO) %>%
+	arrange(variable)
+
+# Multivariate test for normality
+df_full %>%
+	select(G80, vLTmax, vCO, Fmax, FD, FO) %>%
+	mshapiro_test()
+
+# Levene Test for homogenous variance
+df_full %>%
+	gather(key = 'variable', value = 'value', G80, vLTmax, vCO, Fmax, FD, FO) %>%
+	group_by(variable) %>%
+	levene_test(value ~ texture)
+```
+
+
+With those observations on hand, MANOVA is performed to compare the mean vectors. We obtained the following statistics in the table below. Using Wilks as the benchmark, p-value is closed to tiny. Thus, it is found that there were differences in the thermophysical properties of at least one element between at least one pair of cheese textures.
+
+```{r manova, warning = FALSE, message = FALSE, echo = FALSE}
+# MANOVA test
+res_lm <- lm(cbind(G80, vLTmax, vCO, Fmax, FD, FO) ~ texture, data = df_full)
+texture_manova <- Manova(res_lm, test.statistic = "Wilks")
+# texture_manova <- manova(cbind(G80, vLTmax, vCO, Fmax, FD, FO) ~ texture, data = df_full)
+summary(texture_manova, univariate = FALSE, multivariate = TRUE, p.adjust.method = TRUE)
+# summary(texture_manova, test.statistic = 'Wilks')
+```
+
+But how do they differ among sites? A quick look at the profile plot - Figure 3.3 (after scaling since different units between variables) shows all the properties are different across textures except maybe for vLTmax. This is the same observation looking at the box plot above. However, to concretely prove this, post-hoc tests of indiviual properties have to be carried out. Since homogeneity of variance assumption is violated, Welch anova test is the preferred choice compared to the normal anova. Table 3.1 shows that only vLTmax has the p-value of greater than 0.0083 (not 0.05 - see note below). This confirms the hypothesis that all thermalphysical properties are different between cheese textures except for vLTmax.
+
+A more thorough pairwise comparison can also be views from table 3.2 (see Appendix) where similar result is showed as well.
+
+*** Important note here is that we will use Bonferroni correction p-value which is p-value divided by number of variable instead of the normal p-value. This will make sure we control for experiment-wise error rate. In our case, the Bonferroni p-value = 0.05 / 6 = 0.0083.
+
+```{r texture-profile-plot, warning = FALSE, message = FALSE, echo = FALSE}
+profile_plot(data = df_full[, c('texture', 'G80', 'vLTmax', 'vCO', 'Fmax', 'FD', 'FO')], cluster = 'texture', type = 'line') + labs(title = "Figure 3.3 - Mean Cluster Profiles of standardized thermophysical properties")
+```
+
+```{r manova-welch, warning = FALSE, message = FALSE, echo = FALSE}
+# Group the data by variable
+p <- df_full %>%
+	gather(key = "variable", value = "value", G80, vLTmax, vCO, Fmax, FD, FO) %>%
+	group_by(variable) %>%
+	welch_anova_test(value ~ texture)
+
+knitr::kable(p, caption = 'Table 3.1 - Welch Anova Test')
+```
+
+```{r manova-adhoc, warning = FALSE, message = FALSE, echo = FALSE}
+p <- df_full %>%
+	gather(key = "variable", value = "value", G80, vLTmax, vCO, Fmax, FD, FO) %>%
+	group_by(variable) %>%
+	games_howell_test(value ~ texture) %>%
+	select(-estimate, -conf.low, -conf.high)
+
+knitr::kable(p, caption = 'Table 3.2 - Pairwise Comparisons')
+```
+
+### 2. Based on thermophysical characteristics, how many cheese varieties (not textures) are present in our data?
+
+This is an intriguing question requiring unsupervised clustering algorithm. Unsupervised here means that there are no label attached to the group before clusters (like texture). One can say the algorithm will `blindly` assess the data and group them based on some criteria. In this case, the algorithm K-means is chosen for its simplicity and high performance with `Euclidean distance` as the criteria. In simple terms, objects that are closed together should be grouped together! Fortunately, there is no categorical variable in thermophysical properties that will require a more complex criteria than Euclidean distance.
+
+To carry a K-mean algorithm, we first need to pre-specify how many clusters to consider. From this initial choice, K-mean will start reassigning labels accordingly. One way of finding the optimal number of clusters is using within sum of square. Iterating over a number of initial k-clusters and find the k at elbow point (we do not want k to be too large). Figure 3.4 shows the best numbers of cluster seems to 3 or 4 here. We will go with 4 since it is the same number of textures we have.
+
+Figure 3.5 shows how data is separated into the 4 groups on the first and second principal components plot (mentioned above in the EDA section). It is looking very good where the overlapping is quite small. The last remaining problem is to compare this grouping with cheese texture groups and see how different they are. Figure 3.7 shows the proportion of cluster in each texture. Notice the all observation in cluster 1 is fully enclosed in soft cheese texture. This agrees with initial observations in the EDA above. Cluster 3 seems to be mainly hard with some Pasta Filata.
+
+One important thing to note is that different algorithm will group the data differently. There is a objectively best way to group data! Take a look at Figure 3.6 where instead of K-mean, hierarchical clustering algorithm is employed. In this case, 3 clusters seems to be much better than 4!
+
+```{r kmean-optimal-cluster, warning = FALSE, message = FALSE, echo = FALSE}
+# optimal number of clusters
+# fviz_nbclust(df_full_scaled, FUNcluster)
+fviz_nbclust(df_full_scaled[, c('G80', 'vLTmax', 'vCO', 'Fmax', 'FD', 'FO')], kmeans, method = "wss") +
+	geom_vline(xintercept = 4, linetype = 2) +
+	labs(title = "Figure 3.4 - Optimal number of clusters based on WSS")
+
+# fviz_nbclust(df_full_scaled[, c('G80', 'vLTmax', 'vCO', 'Fmax', 'FD', 'FO')], kmeans, method = "silhouette")
+```
+
+
+```{r kmean-cluster, warning = FALSE, message = FALSE, echo = FALSE}
+# Compute k-means with k = 4
+set.seed(27)
+res_km <- kmeans(df_full_scaled[, c('G80', 'vLTmax', 'vCO', 'Fmax', 'FD', 'FO')], 4, nstart = 25)
+
+# combine
+df_full_scaled <- cbind(df_full_scaled, cluster = res_km$cluster)
+
+# visualize
+p <- fviz_cluster(res_km, df_full_scaled[, c('G80', 'vLTmax', 'vCO', 'Fmax', 'FD', 'FO')],
+                  palette = "Set2", ggtheme = theme_minimal())
+p + labs(title = "Figure 3.5 - Kmeans clustering")
+```
+
+```{r mosaic-plot, warning = FALSE, message = FALSE, echo = FALSE}
+mosaicplot(texture ~ cluster, data = df_full_scaled, col = my_cols, main = 'Figure 3.7 - Mosaic plot')
+```
+
+
+```{r hierarchical-cluster, warning = FALSE, message = FALSE, echo = FALSE}
+# Use hcut() which compute hclust and cut the tree
+hc.cut <- hcut(df_full_scaled[, c('G80', 'vLTmax', 'vCO', 'Fmax', 'FD', 'FO')], k = 4, hc_method = 'complete')
+
+# Visualize dendrogram
+fviz_dend(hc.cut, show_labels = FALSE, rect = TRUE)
+
+# Visualize cluster
+p <- fviz_cluster(hc.cut, ellipse.type = 'convex')
+p + labs(title = "Figure 3.6 - Complete hierarchical clustering")
+```
+
+### 3. Can we identify the texture of the cheese using the thermophysical characteristics for new cheese products?
+
+The question requires a classification algorithm that take into account the thermophysical characteristics of a new cheese and assign them the texture. Some algorithms are Naive Bayes, Logistic regression, Linear Discriminant Analysis (LDA), tree-based...Lets proceed with LDA in this case. Unlike the first and second questions where model assessment is not necessary, we will want to see how well the LDA assigning the cheese to each texture. One way of accomplish this is through cross validations - where we take some data for training a model and use the rest for assessment model performance. Leave-one-out is a popular cross validation method and a built-in feature for R which we will utilize below.
+
+The full output of LDA can be viewed in the notebook from the Appendix. Here we will focus on the performance with the prior of each texture equal to 0.25 since each cheese texture are equally likely to appear. Figure 3.8 shows very good predictions based on LD1, LD2, LD3. Naturally, Table 3.2 shows that LDA predicted perfectly every observation! This means that based on the thermophysical characteristics, we can confidently predict which texture that cheese will have.
+
+```{r split-data, warning = FALSE, message = FALSE, echo = FALSE, eval = FALSE}
+set.seed(27)
+ind <- sample(2, nrow(df_full_scaled), replace = TRUE, prob = c(0.7, 0.3))
+df_train <- df_full_scaled[ind == 1,]
+df_test <- df_full_scaled[ind == 2,]
+```
+
+```{r lda, warning = FALSE, message = FALSE, echo = FALSE}
+set.seed(27)
+res_lda <- lda(texture ~ G80 + vLTmax + vCO + Fmax + FD + FO, df_full_scaled)
+res_lda
+```
+
+```{r lda-matrix, warning = FALSE, message = FALSE, echo = FALSE}
+plot(res_lda, col = as.numeric(df_full_scaled$texture), main = 'Figure 3.8 - LDA matrix')
+```
+
+#### Confusion matrix
+
+```{r confusion-matrix, warning = FALSE, message = FALSE, echo = FALSE}
+# y_pred <- predict(res_lda, df_train)$class
+# train_cm <- table(Predicted = y_pred, Actual = df_train$texture)
+# knitr::kable(train_cm, caption = 'Figure 3.8 - Training Confusion Matrix')
+#
+# y_pred <- predict(res_lda, df_test)$class
+# test_cm <- table(Predicted = y_pred, Actual = df_test$texture)
+# knitr::kable(test_cm, caption = 'Figure 3.9 - Testing Confusion Matrix')
+
+res_lda_2 <- lda(texture ~ G80 + vLTmax + vCO + Fmax + FD + FO, data = df_full_scaled, CV = TRUE)
+conf <- table(list(Predicted = res_lda_2$class, Actual = df_full_scaled$texture))
+test_cm <- caret::confusionMatrix(conf)
+knitr::kable(conf, caption = 'Table 3.2 - Test Error Confusion Matrix')
+```
+
+
+## Recommendations
+
+1. Are the thermophysical properties of the four cheese textures different? If so, which textures are different?
+
+- The four cheese textures has statistically different thermophysical properties except for Temperature v at tan (vLTmax)
+- Soft cheese has a very distinct thermophysical properties from the rest.
+
+2. Based on thermophysical characteristics, how many cheese varieties (not textures) are present in our data?
+
+- Using K-mean, four cheese varieties can be nicely grouped together.
+- Using Hierarchical clustering, three cheese groups seems to be better.
+
+3. Can we identify the texture of the cheese using the thermophysical characteristics for new cheese products?
+
+- Cheese textures can be predicted precisely from their thermophysical characteristics. LDA gives a 0% error rate!
+
+## Resources
+
+For MANOVA, LDA, K-mean algorithm, please refer to the links below
+
+[PSU Stats 508](https://online.stat.psu.edu/stat508/)
+
+An Introduction to Statistical Learning for more in-dept reference
+
+[ISLR](https://www.statlearning.com/)
+
+[LDA example](https://pages.cms.hu-berlin.de/EOL/gcg_quantitative-methods/Lab11_LDA_Model-assessment.html)
+
+[MANOVA exmample](https://www.datanovia.com/en/lessons/one-way-manova-in-r/#assumptions-and-preleminary-tests)
+
+[K-mean exmample](https://www.datanovia.com/en/lessons/k-means-clustering-in-r-algorith-and-practical-examples/)
+
+## Considerations
+
+There are two main concerns about the analysis. Firstly, the dataset size is small with only 89 observations. Moreover, there are only two manufacturers in the data set. Thus, the results might be very specific to the cheeses produced by these two manufacturers and cannot be applied to the general population.
+
+Secondly, since this is an observational study, the results are inferential and not causal.
+
+Appendix
+
