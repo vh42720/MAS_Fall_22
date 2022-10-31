@@ -1,0 +1,237 @@
+---
+title: "Stats 487 Activity 3.1"
+author: 'Vinh Hang'
+date: '2022-10-26'
+output:
+tufte::tufte_html: default
+---
+
+# Stats 487 Activity 3.1
+
+Outline:
+
+1. [Project Data]
+2. [Task 1]
+3. [Task 2]
+4. [References]
+
+R requirements: ggplot2, dplyr
+
+```{r imports, warning = FALSE, echo = FALSE, message = FALSE}
+library(tibble)
+library(ISLR)
+library(MASS)
+library(sfsmisc)
+library(dplyr)
+library(lmtest)
+
+# turn off scientific notation
+options(scipen = 999)
+```
+
+## Project Data
+
+```{r load-data, warning = FALSE, message = FALSE, echo = FALSE}
+# load data
+df <- as_tibble(read.csv('D:\\DataspellProjects\\MAS_Fall_22\\Stat_487\\data\\health.csv', stringsAsFactors = T))
+df['Female'] <- as.factor(df$Female)
+df['FedRegion'] <- as.factor(df$FedRegion)
+
+head(df)
+```
+
+## Task 1
+
+#### 1. Uni-variate descriptive statistics
+
+```{r univariate-descriptive-statistic}
+# discriptive stats
+summary(df[c('TotCostPer', 'Testusers', 'Age')])
+
+# plots 3 in one
+par(mfrow = c(1, 3))
+
+# hist plot with distribution on top
+hist(df$TotCostPer, freq = FALSE, , main = 'Histogram of TotCostPer', xlab = 'TotCostPer')
+lines(density(df$TotCostPer), col = 'red', lwd = 2)
+
+hist(df$Testusers, freq = FALSE, , main = 'Histogram of Testusers', xlab = 'Testusers')
+lines(density(df$Testusers), col = 'red', lwd = 2)
+
+hist(df$Age, freq = FALSE, main = 'Histogram of Age', xlab = 'Age')
+lines(density(df$Age), col = 'red', lwd = 2)
+
+```
+
+#### 2. Bi-variate descriptive statistics
+
+```{r bivariate-statistics}
+# corr matrix
+cor(df[c('TotCostPer', 'Testusers', 'Age')])
+
+# pair plot
+pairs(df[c('TotCostPer', 'Testusers', 'Age')])
+```
+
+#### 3. OLS
+
+```{r ols}
+set.seed(27)
+
+# regression
+reg_ols <- lm(TotCostPer ~ Testusers + Age, data=df)
+
+# summary
+summary(reg_ols)
+```
+
+#### 4. Checking assumptions
+
+```{r checking-assumptions}
+# 4 in 1 checks
+par(mfrow = c(2, 2))
+plot(reg_ols)
+```
+
+#### 5. Testing assumptions
+
+```{r Shapiro-Wilk-normality-test}
+sresid <- studres(reg_ols)
+shapiro.test(sresid)
+```
+
+```{r ncvTest-Homoscedasticity}
+ncvTest(reg_ols)
+```
+
+```{r durbin-Watson-auto}
+durbinWatsonTest(reg_ols)
+```
+
+#### 6. Robust regression
+
+```{r robust-regression}
+reg_robust <- rlm(TotCostPer ~ Testusers + Age, data=df)
+summary(reg_robust)
+```
+
+#### 7. Bi-variate descriptive statistics
+
+
+```{r test-Testusers}
+f.robftest(reg_robust, var = "Testusers")
+```
+
+```{r test-Age}
+f.robftest(reg_robust, var = "Age")
+```
+
+```{r}
+sqrt(mean(reg_robust$residuals^2))
+```
+
+```{r plot-robust}
+par(mfrow=c(2,2))
+plot(reg_robust,which=1:3)
+```
+
+## Task 2
+
+#### 8. Uni-variate descriptive statistics
+
+```{r univariate-descriptive-statistic-3var}
+# discriptive stats
+summary(df[c('TotCostPer', 'Female', 'FedRegion')])
+
+# plots 3 in one
+par(mfrow = c(1, 3))
+
+# hist plot with distribution on top
+hist(df$TotCostPer, freq = FALSE, , main = 'Histogram of TotCostPer', xlab = 'TotCostPer')
+lines(density(df$TotCostPer), col = 'red', lwd = 2)
+
+plot(df$Female, main = 'Barplot of Female', xlab = 'Female')
+
+plot(df$FedRegion, main = 'Barplot of FedRegion', xlab = 'FedRegion')
+
+```
+
+#### 9. Bi-variate descriptive statistics
+
+
+```{r}
+# plots 3 in one
+par(mfrow = c(1, 2))
+# ggboxplot(df, x = "Female", y = "TotCostPer", color = "Female", palette = c("#00AFBB", "#E7B800"))
+# ggboxplot(df, x = "FedRegion", y = "TotCostPer", color = "FedRegion", palette = c("#00AFBB", "#E7B800"))
+boxplot(df$TotCostPer ~ df$Female, main = 'Boxplot of TotCostPer/Female', ylab = 'TotCostPer', xlab = 'Female', col = c("#00AFBB", "#E7B800"), frame=FALSE)
+boxplot(df$TotCostPer ~ df$FedRegion, main = 'Boxplot of TotCostPer/FedRegion', ylab = 'TotCostPer', xlab = 'FedRegion',frame=FALSE)
+```
+
+
+#### 10. ANOVA
+
+```{r anova}
+res_aov <- aov(TotCostPer ~ Female + FedRegion, data = df)
+summary(res_aov)
+```
+
+#### 11. Check assumptions
+
+
+```{r}
+leveneTest(TotCostPer ~ Female * FedRegion, data = df)
+```
+
+```{r Shapiro-Wilk-normality-test}
+sresid <- residuals(res_aov)
+shapiro.test(sresid)
+```
+
+```{r}
+par(mfrow=c(2,2))
+plot(res_aov)
+```
+
+```{r anova-interactions-2}
+res_aov_int <- aov(TotCostPer ~ Female + FedRegion + Female:FedRegion, data = df)
+summary(res_aov_int)
+```
+
+#### 12. Checking Assumptions
+#### 13. Robust
+#### 14. Bi-variate descriptive statistics
+
+```{r}
+res_aov <- aov(TotCostPer ~ Female + FedRegion, data = df)
+Anova(res_aov, type='III')
+```
+
+```{r}
+res_aov <- aov(TotCostPer ~ Female, data = df)
+Anova(res_aov, type='III')
+```
+
+
+```{r}
+par(mfrow=c(2,2))
+plot(res_aov)
+```
+
+## References
+
+For MANOVA, LDA, K-mean algorithm, please refer to the links below
+
+[PSU Stats 508](https://online.stat.psu.edu/stat508/)
+
+An Introduction to Statistical Learning for more in-dept reference
+
+[ISLR](https://www.statlearning.com/)
+
+[LDA example](https://pages.cms.hu-berlin.de/EOL/gcg_quantitative-methods/Lab11_LDA_Model-assessment.html)
+
+[MANOVA exmample](https://www.datanovia.com/en/lessons/one-way-manova-in-r/#assumptions-and-preleminary-tests)
+
+[K-mean exmample](https://www.datanovia.com/en/lessons/k-means-clustering-in-r-algorith-and-practical-examples/)
+
+
