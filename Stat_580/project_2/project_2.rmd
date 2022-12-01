@@ -1,0 +1,109 @@
+---
+title: "Stats 580 Second Project"
+author: 'Vinh Hang'
+date: '2022-10-08'
+output:
+tufte::tufte_html: default
+---
+
+# Stat 580 Project 2
+
+## Executive Summary
+
+
+
+Outline:
+
+1. [Project Description]
+2. [Research Questions and Statistical Approaches]
+3. [Variables]
+4. [EDA]
+5. [Statistical Analysis]
+6. [Recommendations]
+7. [Resources]
+8. [Considerations]
+
+R requirements: psych, ggplot2, dplyr, gridExtra, grid, ggpubr, patchwork, table, qacr, factoextra, klaR, psych, MASS, devtools, rstatix, ggbiplot, caret
+
+```{r imports, warning = FALSE, echo = FALSE, message = FALSE}
+library(dplyr)
+library(ggplot2)
+library(stringr)
+library(norm)
+library(Hmisc)
+```
+
+## Project Description
+
+
+## Research Questions and Statistical Approaches
+
+
+## Variables
+
+```{r load-data, warning = FALSE, message = FALSE, echo = FALSE}
+# add neighborgood indicator and KitchenAbvGr for CollegeCr dataset
+df_college <- read.csv('D:\\DataspellProjects\\MAS_Fall_22\\Stat_580\\project_2\\data\\CollegeCr.csv', stringsAsFactors = T)
+df_college['neighborhood'] <- 'CollegeCr'
+df_college['KitchenAbvGr'] <- NA
+
+# add neighborgood indicator and BsmtUnfSF for Edwards dataset
+df_edwards <- read.csv('D:\\DataspellProjects\\MAS_Fall_22\\Stat_580\\project_2\\data\\Edwards.csv', stringsAsFactors = T)
+df_edwards['neighborhood'] <- 'Edwards'
+df_edwards['BsmtUnfSF'] <- NA
+
+# add neighborgood indicator for OldTown dataset
+df_oldtowm <- read.csv('D:\\DataspellProjects\\MAS_Fall_22\\Stat_580\\project_2\\data\\OldTown.csv', stringsAsFactors = T)
+df_oldtowm['neighborhood'] <- 'OldTown'
+
+# scale data
+df_full <- rbind(df_college, df_edwards, df_oldtowm)
+head(df_full)
+```
+
+
+```{r}
+# Split Lot Info into LotConfig, LotShape, LotArea, LotFrontage
+df_full[c('LotConfig', 'LotShape', 'LotArea', 'LotFrontage')] <- str_split_fixed(df_full$LotInfo, ';', 4)
+df_full['LotArea'] <- as.numeric(unlist(df_full['LotArea']))
+df_full['LotFrontage'] <- as.numeric(unlist(df_full['LotFrontage']))
+df_full['LotConfig'] <- as.character(unlist(df_full['LotConfig']))
+df_full['LotShape'] <- as.character(unlist(df_full['LotShape']))
+
+# Split Exterior Info into Exterior1st, ExterQual, ExterCond
+df_full[c('Exterior1st', 'ExterQual', 'ExterCond')] <- str_split_fixed(df_full$Exterior, ';', 3)
+df_full['Exterior1st'] <- as.character(unlist(df_full['Exterior1st']))
+df_full['ExterQual'] <- as.character(unlist(df_full['ExterQual']))
+df_full['ExterCond'] <- as.character(unlist(df_full['ExterCond']))
+
+# Drop redundant
+df_full <- subset(df_full, select = -c(LotInfo, Exterior))
+
+# convert to categorical
+head(df_full)
+```
+
+
+```{r}
+# impute missing values numerica with median
+df_full$LotFrontage <- impute(df_full$LotFrontage, median)
+df_full$BsmtUnfSF <- impute(df_full$BsmtUnfSF, median)
+df_full$KitchenAbvGr <- impute(df_full$KitchenAbvGr, median)
+
+# impute manually categorical
+df_full$BsmtCond[is.na(df_full$BsmtCond)] <- 'TA'
+
+sort(colSums(is.na(df_full)), decreasing = TRUE)
+```
+
+```{r}
+# save full train dataset
+write.csv(df_full, "D:\\DataspellProjects\\MAS_Fall_22\\Stat_580\\project_2\\data\\house_training.csv")
+```
+
+## EDA
+
+
+
+## Statistical Analysis
+

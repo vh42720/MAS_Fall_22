@@ -1,0 +1,9 @@
+# test file
+/test.R
+
+# .idea
+/.idea
+./venv
+
+# ignore config
+/config/
