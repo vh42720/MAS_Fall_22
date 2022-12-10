@@ -14,4 +14,4 @@ y_pred = best_reg.predict(X_test)
 
 # save prediction
 prediction = pd.DataFrame({'uniqueID': y_test.values.ravel(), 'SalePrice': y_pred})
-prediction.to_csv(os.path.join(config['path']['result'], 'prediction.csv'))
+prediction.to_csv(os.path.join(config['path']['result'], 'prediction.csv'), index=False)
